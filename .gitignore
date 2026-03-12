@@ -1,0 +1,10 @@
+.env
+/Users/user/Documents/ALVATIVEPAY/node_modules
+# Node.js
+node_modules/
+dist/
+.env
+.npm/
+.vscode/
+prisma/dev.db
+prisma/migrations/
