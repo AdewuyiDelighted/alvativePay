@@ -11,7 +11,7 @@ const deposit_money = Joi.object({
 
   const validate_transfer = Joi.object({
     user_id: Joi.string().required(),
-    reference:Joi.string().required()
+    transaction_id:Joi.string().required()
   });
   
   export const validate_transfer_validator = validator(validate_transfer);

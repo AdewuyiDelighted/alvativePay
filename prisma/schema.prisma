@@ -21,31 +21,20 @@ model User {
   password          String
   balance           Float    @default(0.0)
   phone_number      String
-  transactions_as_sender Transaction[] @relation("senderTransactions")
-  transactions_as_receiver Transaction[] @relation("receiverTransactions")
-  notifications Notification[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  transactions      Transaction[] @relation("userTransactions")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Transaction {
-  id          String      @id @unique @default(uuid())
-  amount      Float
-  sender_id    String
-  receiver_id  String?
-  sender      User     @relation("senderTransactions", fields: [sender_id], references: [id])
-  receiver    User?     @relation("receiverTransactions", fields: [receiver_id], references: [id])
-  createdAt   DateTime @default(now())
-  transaction_type TransactionType
-  transaction_status TransactionStatus
-}
-
-model Notification {
-  id          String      @id @unique @default(uuid())
-  userId      String
-  message     String
-  User        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
+  id                  String      @id @unique @default(uuid())
+  amount              Float
+  user_id             String      
+  user                User        @relation("userTransactions", fields: [user_id], references: [id])
+  reference           String?     @unique
+  createdAt           DateTime    @default(now())
+  transaction_type    TransactionType
+  transaction_status  TransactionStatus
 }
 
 enum TransactionType{
@@ -56,4 +45,5 @@ enum TransactionType{
 enum TransactionStatus{
   FAILED
   SUCCESSFULL
+  INITIATED
 }

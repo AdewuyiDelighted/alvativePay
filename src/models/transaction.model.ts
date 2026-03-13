@@ -3,102 +3,84 @@ import { db } from "../utils/db.connect.util";
 import { TransactionStatus, TransactionType } from "@prisma/client";
 import axios from "axios"
 
-
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
-const PAYSTACK_BASE_URL = process.env.PAYSTACK_BASE_URL as string;
-
 export interface ICreateTransaction{
   amount:number
-  sender_id:string
-  receiver_id: string |undefined
+  user_id:string
   transaction_type: TransactionType,
+  reference:string
 }
 
 export const transaction_service = {
 
 
-initialize_payment:async (email: string, amount: number) => {
-  try {
-    const response = await axios.post(
-      `${PAYSTACK_BASE_URL}/transaction/initialize`,
-      {
-        email,
-        amount: amount * 100, 
+  create_transaction: async (data:ICreateTransaction,transaction_status:TransactionStatus) => {
+    return db.transaction.create({
+      data: {
+        amount:data.amount,
+        user_id:data.user_id,
+        transaction_type:data.transaction_type,
+        transaction_status:transaction_status,
+        reference:data.reference
       },
-      {
-        headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-          'Content-Type': 'application/json',
+    });
+  },
+  get_user_transactions: async(user_id:string)=>{
+    return db.transaction.findMany({
+      where: {
+      user_id: user_id,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            first_name:true,
+            last_name:true,
+            email: true,
+          },
         },
+      },
+      orderBy: {
+        createdAt: 'desc', 
+      },
+    })
+
+  },
+  update_transaction: async (transaction_id:string,transaction_status:TransactionStatus) => {
+    return db.transaction.update({
+      where: {
+        id: transaction_id,
+      },
+      data: {
+        transaction_status: transaction_status,
+      },
+    });
+  },
+  update_transaction_reference: async (transaction_reference:string,transaction_status:TransactionStatus) => {
+    return db.transaction.update({
+      where: {
+        reference: transaction_reference,
+      },
+      data: {
+        transaction_status: transaction_status,
+      },
+    });
+  },
+  get_transaction_by_id: async (transaction_id:string) => {
+    return db.transaction.findUnique({
+      where: {
+        id: transaction_id,
+      },
+    });
+  },
+  get_user_balance: async(user_id:string)=>{
+    return db.transaction.aggregate({
+      where:{
+        user_id:user_id,
+        transaction_status:TransactionStatus.SUCCESSFULL
+      },
+      _sum:{
+        amount:true
       }
-    );
-
-    return response.data;
-  } catch (error: any) {
-    throw new Error(`Failed to initialize payment: ${error.message}`);
+    })
   }
-},
-
-
-verify_payment : async (reference: string) => {
-  try {
-    const response = await axios.get(
-      `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
-      {
-        headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        },
-      }
-    );
-
-    return response.data;
-  } catch (error: any) {
-    throw new Error(`Failed to verify payment: ${error.message}`);
-  }
-},
-
-create_transaction: async (data:ICreateTransaction,transaction_status:TransactionStatus) => {
-  return db.transaction.create({
-    data: {
-      amount:data.amount,
-      sender_id:data.sender_id,
-      receiver_id:data.receiver_id ,
-      transaction_type:data.transaction_type,
-      transaction_status:transaction_status,
-      
-    },
-  });
-},
-get_user_transactions: async(user_id:string)=>{
-  return db.transaction.findMany({
-    where: {
-      OR: [
-        { sender_id: user_id }, 
-        { receiver_id: user_id }, 
-      ],
-    },
-    include: {
-      sender: {
-        select: {
-          id: true,
-          first_name:true,
-          last_name:true,
-          email: true,
-        },
-      },
-      receiver: {
-        select: {
-          id: true,
-          first_name:true,
-          last_name:true,
-          email: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc', 
-    },
-  })
-
-}
 }

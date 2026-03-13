@@ -20,7 +20,7 @@ export const user_service = {
           },
         });
     },
-    get_account_by_email:async(email:string)=>{ 
+    get_user_by_email:async(email:string)=>{ 
         return db.user.findUnique({
             where:{
                 email
@@ -28,11 +28,11 @@ export const user_service = {
         })
     },
 
-    get_account_by_id:async(id:string)=>{ 
+    get_user_by_id:async(id:string)=>{ 
         return db.user.findUnique({
             where:{
                 id
-            }
+            },
         })
     },
 
@@ -58,5 +58,4 @@ export const user_service = {
         })
     }
 
-    
 }

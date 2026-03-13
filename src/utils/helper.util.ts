@@ -1,6 +1,8 @@
+import { User } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { NextFunction,Request,Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { user_service } from '../models/user.model';
 
 
 const saltRounds = 10;
@@ -33,11 +35,6 @@ export const verifyToken = (token: string): any => {
     throw new Error('Invalid or expired token');
   }
 };
-
-
-
-
-
 
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
@@ -83,3 +80,49 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     });
   }
 };
+
+export function amount_check(amount:number){
+if(amount <= 0){
+  throw new Error("Invalid amount")
+}
+
+}
+
+export async function validate_values(amount:number,sender_id:string,receiver_id:string,password:string){
+  const found_user = await user_service.get_user_by_id(sender_id)
+  if(!found_user){
+    throw new Error("User Doesn't Exist")
+  }
+
+  const isValidPassword = await verifyPassword(password, found_user.password);
+    
+    if (!isValidPassword){
+      throw new Error("Invalid details")
+    }
+  
+  amount_check(amount)
+  
+
+  const receiver = await user_service.get_user_by_id(receiver_id)
+
+  if(!receiver){
+      throw new Error("Invalid Receiver")
+  }
+
+
+    const sender_balance = await user_service.get_user_balance(sender_id)
+    if(sender_balance?.balance){
+      if(amount > sender_balance?.balance){
+        throw new Error("Insufficient Funds")
+      }
+    }
+
+    return {
+      data:{
+        sender:found_user,
+        receiver:receiver
+      }
+    }
+
+
+}

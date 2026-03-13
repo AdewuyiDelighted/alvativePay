@@ -1,10 +1,11 @@
-import { Request, Response } from 'express';
+import { Request, Response,RequestHandler } from 'express';
 import {  transaction_service,  } from '../models/transaction.model';
 import { deposit_money_validator, get_user_transaction_history_validator, transfer_funds_validator, validate_transfer_validator } from '../validators/transaction.validator';
 import { user_service } from '../models/user.model';
 import { TransactionStatus, TransactionType, User } from '@prisma/client';
-import { verifyPassword } from '../utils/util';
-import { io } from '../utils/socket.util';
+import { amount_check, validate_values, verifyPassword } from '../utils/helper.util';
+import crypto from "crypto";
+import { initialize_transaction, verify_payment } from '../utils/paystack.util';
 
 
 export const initialize_payment = async (req: Request, res: Response) => {
@@ -14,7 +15,7 @@ export const initialize_payment = async (req: Request, res: Response) => {
     if(error){
         throw new Error(error );
     }
-    const found_user = await user_service.get_account_by_id(value.user_id)
+    const found_user = await user_service.get_user_by_id(value.user_id)
     
     if(!found_user){
         throw new Error("User Doesn't Exist")
@@ -26,9 +27,17 @@ export const initialize_payment = async (req: Request, res: Response) => {
     }
 
     amount_check(value.amount)
-    const payment_data = await transaction_service.initialize_payment(found_user.email,value.amount);
+    const payment_data = await initialize_transaction(found_user.email,value.amount);
 
-    
+    const data = {
+      amount:value.amount,
+      user_id:found_user.id,
+      transaction_type:TransactionType.DEPOSIT,
+      reference:payment_data.data.reference
+    }
+   const created_transaction =  await transaction_service.create_transaction(data,TransactionStatus.INITIATED)    
+   console.log("CREATED TRANSACTION", created_transaction)  
+
     res.status(200).send({
       status: 'success',
       message: 'Payment initialized successfully',
@@ -42,154 +51,48 @@ export const initialize_payment = async (req: Request, res: Response) => {
   }
 };
 
- // Verify payment and update user balance
 export const verify_transaction = async (req: Request, res: Response) => {
   try {
     const { error,value } = validate_transfer_validator(req.body);
     if(error){
       throw new Error(error );
   }
-  const found_user = await user_service.get_account_by_id(value.user_id)
+  const found_user = await user_service.get_user_by_id(value.user_id)
   
-  if(!found_user){
-      throw new Error("User Doesn't Exist")
-  }
-
-  
-  const verified_data = await transaction_service.verify_payment(value.reference)
-    const data = {
-      amount:verified_data.data.amount,
-      sender_id:found_user.id,
-      receiver_id:undefined,
-      transaction_type:TransactionType.DEPOSIT,
-    }
-
-
-    if (verified_data.data.status !== 'success') {
-      await transaction_service.create_transaction(data,TransactionStatus.FAILED)      
-      throw new Error('Payment not successful'); 
-    } else {
-      await transaction_service.create_transaction(data,TransactionStatus.SUCCESSFULL)
-
-    }
-
-    const amount = verified_data.data.amount / 100; 
-    const new_balance = found_user.balance + amount
-    const updatedUser = await user_service.update_user_balance(found_user.id, new_balance);
-
-
-    res.status(200).send({
-      status: 'success',
-      message: 'Payment verified and user balance updated',
-      data: updatedUser,
-    });
-  } catch (error: any) {
-    res.status(500).send({
-      status: 'failed',
-      message: error.message,
-    });
-  }
-};
-
-export const transfer_fund = async (req: Request, res: Response) => {
-  try {
-    const { error,value } = transfer_funds_validator(req.body);
-    if(error){
-      throw new Error(error );
-    }
-  const result  = await validate_values(value.amount,value.sender_id,value.receiver_id,value.password)
-  if(result){
-    
-    const data = {
-      amount:value.amount,
-      sender_id:value.sender_id,
-      receiver_id:value.receiver_id,
-      transaction_type:TransactionType.TRANSFER,
-    }
-
-    const sender_new_balance = result.data.sender.balance - value.amount
-    const updated_sender = await user_service.update_user_balance(value.sender_id, sender_new_balance);
-    
-    const receiver_new_balance = result.data.receiver.balance + value.amount
-    const updated_receiver = await user_service.update_user_balance(value.receiver_id, receiver_new_balance);
-
-    send_notification(result.data.sender,result.data.receiver,value.amount)
-
-    await transaction_service.create_transaction(data,TransactionStatus.SUCCESSFULL)      
-
-
-    res.status(200).send({
-      status: 'success',
-      message: 'Payment verified and user balance updated',
-      data: {
-        sender:updated_sender,
-        receiver:updated_receiver
-      },
-    });
-  }else{
-    const data = {
-      amount:value.amount,
-      sender_id:value.sender_id,
-      receiver_id:value.receiver_id,
-      transaction_type:TransactionType.TRANSFER,
-    }
-    await transaction_service.create_transaction(data,TransactionStatus.SUCCESSFULL)      
-
-  }
-  } catch (error: any) {
-
-    res.status(500).send({
-      status: 'failed',
-      message: error.message,
-    });
-  }
-};
-
-function amount_check(amount:number){
-  if(amount <= 0){
-    throw new Error("Invalid amount")
-  }
-
-}
-
-async function validate_values(amount:number,sender_id:string,receiver_id:string,password:string){
-  const found_user = await user_service.get_account_by_id(sender_id)
   if(!found_user){
     throw new Error("User Doesn't Exist")
   }
 
-  const isValidPassword = await verifyPassword(password, found_user.password);
-    
-    if (!isValidPassword){
-      throw new Error("Invalid details")
-    }
-  
-  amount_check(amount)
-  
-
-  const receiver = await user_service.get_account_by_id(receiver_id)
-
-  if(!receiver){
-      throw new Error("Invalid Receiver")
+  const transaction = await transaction_service.get_transaction_by_id(value.transaction_id);
+  let updated_user
+  if(!transaction || !transaction.reference){
+    throw new Error("Transaction Doesn't Exist")
   }
+  const verified_data = await verify_payment(transaction?.reference)
 
-
-    const sender_balance = await user_service.get_user_balance(sender_id)
-    if(sender_balance?.balance){
-      if(amount > sender_balance?.balance){
-        throw new Error("Insufficient Funds")
-      }
+    if (verified_data.data.status !== 'success') {
+      await transaction_service.update_transaction(value.transaction_id,TransactionStatus.FAILED)      
+      throw new Error('Payment not successful'); 
+    } else {
+      const amount = verified_data.data.amount / 100; 
+      const intial_balance = (await transaction_service.get_user_balance(found_user.id))?._sum?.amount || 0;
+      const new_balance = intial_balance + amount;
+      updated_user = await user_service.update_user_balance(found_user.id, new_balance);
+      await transaction_service.update_transaction(value.transaction_id,TransactionStatus.SUCCESSFULL)      
     }
 
-    return {
-      data:{
-        sender:found_user,
-        receiver:receiver
-      }
-    }
-
-
-}
+    res.status(200).send({
+      status: 'success',
+      message: 'Payment verified and user balance updated',
+      data: updated_user,
+    });
+  } catch (error: any) {
+    res.status(500).send({
+      status: 'failed',
+      message: error.message,
+    });
+  }
+};
 
 export const get_user_transaction_history = async (req: Request, res: Response) => {
   try {
@@ -198,7 +101,7 @@ export const get_user_transaction_history = async (req: Request, res: Response) 
     if(error){
         throw new Error(error );
     }
-    const found_user = await user_service.get_account_by_id(value.user_id)
+    const found_user = await user_service.get_user_by_id(value.user_id)
     
     if(!found_user){
         throw new Error("User Doesn't Exist")
@@ -224,16 +127,68 @@ export const get_user_transaction_history = async (req: Request, res: Response) 
   }
 };
 
-async function send_notification(sender:User,receiver:User,amount:number){
-  io.emit('notification', {
-    userId: sender.id,
-    message: `You have transferred ₦${amount} to  ${receiver.last_name + receiver.first_name}.`,
-    balance: sender.balance,
-  });
+export const process_paystack_webhook = async (req: Request, res: Response): Promise<void> => {
+  console.log("PAYSTACK WEBHOOK CALLED");
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  
+  try {
+    const hash = crypto
+      .createHmac("sha512", secret!)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+    
+    console.log("PAYSTACK HASH CALLED");
 
-  io.emit('notification', {
-    userId: receiver.id,
-    message: `You have received ₦${amount} from user ${sender.last_name + receiver.first_name}.`,
-    balance: receiver.balance,
-  });
+    if (hash !== req.headers["x-paystack-signature"]) {
+      console.log("PAYSTACK SECURITY CHECK FAILED");
+      res.status(401).send("Invalid signature");
+      return; 
+    }
+    
+    console.log("PAYSTACK EVENT", req.body);
+    
+    const event = req.body.event;
+    const data = req.body.data;
+
+    switch (event) {  
+      case "charge.success":
+        const transact: any = await verify_payment(data.reference);
+        console.log("CHARGE SUCCESS", transact.data);
+        
+        const transactionSuccessful =
+          transact.data.gateway_response.toLowerCase().includes("approved by financial institution") ||
+          transact.data.gateway_response.toLowerCase().includes("approved") ||
+          transact.data.gateway_response.toLowerCase().includes("successful");
+          
+        if (!transactionSuccessful) {
+          console.log("Transaction not successful, skipping wallet credit.");
+          res.status(400).json({ message: "Transaction not successful" });
+          return; 
+        }
+        
+        const updated_transaction = await transaction_service.update_transaction_reference(
+          transact.data.reference, 
+          TransactionStatus.SUCCESSFULL
+        ); 
+        
+        const transaction_data = transact.data;
+        const found_user = await user_service.get_user_by_id(updated_transaction.user_id);
+        console.log("FOUND USER", found_user);
+        
+        const amount = transaction_data.data.amount / 100; 
+        const intial_balance = (await transaction_service.get_user_balance(found_user?.id!))?._sum?.amount || 0;
+        const new_balance = intial_balance + amount;
+        const updated_user = await user_service.update_user_balance(found_user?.id!, new_balance);
+        console.log("USER BALANCE UPDATED", updated_user);
+        break;
+        
+      default:
+        console.log(`Unhandled event type: ${event}`);
+    }
+    res.status(200).json({ message: "Webhook received" });
+    
+  } catch(error: any) {
+    console.error("Error processing Paystack webhook:", error);
+    res.status(500).send("Internal Server Error");
+  }
 }
