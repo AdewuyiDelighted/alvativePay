@@ -78,13 +78,15 @@ export const verify_transaction = async (req: Request, res: Response) => {
       const intial_balance = (await transaction_service.get_user_balance(found_user.id))?._sum?.amount || 0;
       const new_balance = intial_balance + amount;
       updated_user = await user_service.update_user_balance(found_user.id, new_balance);
-      await transaction_service.update_transaction(value.transaction_id,TransactionStatus.SUCCESSFULL)      
+      await transaction_service.update_transaction(value.transaction_id,TransactionStatus.SUCCESSFULL)  
     }
+    const { password, ...user_without_password} = updated_user  
+
 
     res.status(200).send({
       status: 'success',
       message: 'Payment verified and user balance updated',
-      data: updated_user,
+      data: user_without_password,
     });
   } catch (error: any) {
     res.status(500).send({
