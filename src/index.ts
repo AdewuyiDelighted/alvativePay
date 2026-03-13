@@ -16,7 +16,7 @@ app.listen(PORT, () => {
 });
 app.get('/', (req, res) => {
     res.json({
-      message: "Alvative API is running 🚀"
+      message: "Alvative API is running"
     });
   });
 
