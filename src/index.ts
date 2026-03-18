@@ -1,6 +1,7 @@
 import express from "express";
 import userRouter from "./routes/user.route";
 import transactionRouter from "./routes/transaction.route" 
+import cors from "cors";
 
 const app = express();
 
@@ -18,7 +19,17 @@ app.get('/', (req, res) => {
     res.json({
       message: "Alvative API is running"
     });
-  });
+});
+
+
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true,
+}));
+// app.use(cors({
+//   origin: ["http://localhost:5173", "https://your-frontend.vercel.app"],
+//   credentials: true,
+// }));
 
 export default app;
 

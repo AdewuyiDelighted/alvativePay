@@ -98,7 +98,7 @@ export const verify_transaction = async (req: Request, res: Response) => {
 
 export const get_user_transaction_history = async (req: Request, res: Response) => {
   try {
-    const { error, value } = get_user_transaction_history_validator(req.body);
+    const { error, value } = get_user_transaction_history_validator(req.query);
 
     if(error){
         throw new Error(error );
@@ -108,12 +108,6 @@ export const get_user_transaction_history = async (req: Request, res: Response) 
     if(!found_user){
         throw new Error("User Doesn't Exist")
     }
-    const isValidPassword = await verifyPassword(value.password, found_user.password);
-    
-    if (!isValidPassword){
-      throw new Error("Invalid details")
-    }
-
     const transactions = await transaction_service.get_user_transactions(value.user_id)
     
     res.status(200).send({

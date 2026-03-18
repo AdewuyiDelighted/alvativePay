@@ -27,7 +27,6 @@ const deposit_money = Joi.object({
 
   const get_user_transaction_history = Joi.object({
     user_id: Joi.string().required(),
-    password:Joi.string().required()
   });
   
   export const get_user_transaction_history_validator = validator(get_user_transaction_history);

@@ -58,6 +58,7 @@ export const login = async (req: Request, res: Response) => {
       res.status(200).send({
       status: "success",
       message: "Your request was successful",
+      user_id: user.id,
       data: token,
     });
   } catch (error: any) {
