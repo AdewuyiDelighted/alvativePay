@@ -6,11 +6,9 @@ import cors from "cors";
 const app = express();
 
 app.use(cors({
-  origin: ["http://localhost:5173", "deployed link"],
+  origin: ["http://localhost:5173", "https://alvative-pay-frontend.vercel.app/"],
   credentials: true,
 }));
-
-app.use(express.json());
 
 app.use(express.json()); 
 app.use("/api/user", userRouter); 
