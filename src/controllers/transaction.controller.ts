@@ -1,11 +1,11 @@
 import { Request, Response,RequestHandler } from 'express';
 import {  transaction_service,  } from '../models/transaction.model';
-import { deposit_money_validator, get_user_transaction_history_validator, transfer_funds_validator, validate_transfer_validator } from '../validators/transaction.validator';
+import { deposit_money_validator, direct_debit_charge_validator, get_user_transaction_history_validator, transfer_funds_validator, validate_transfer_validator } from '../validators/transaction.validator';
 import { user_service } from '../models/user.model';
 import { TransactionStatus, TransactionType, User } from '@prisma/client';
-import { amount_check, validate_values, verifyPassword } from '../utils/helper.util';
+import { amount_check } from '../utils/helper.util';
 import crypto from "crypto";
-import { initialize_transaction, verify_payment } from '../utils/paystack.util';
+import { initialize_transaction, verify_payment, paystack_direct_debit_created, paystack_direct_debit_active, charge_direct_debit_account } from '../utils/paystack.util';
 
 
 export const initialize_payment = async (req: Request, res: Response) => {
@@ -20,12 +20,7 @@ export const initialize_payment = async (req: Request, res: Response) => {
     if(!found_user){
         throw new Error("User Doesn't Exist")
     }
-    const isValidPassword = await verifyPassword(value.password, found_user.password);
-    
-    if (!isValidPassword){
-      throw new Error("Invalid details")
-    }
-
+   
     amount_check(value.amount)
     const payment_data = await initialize_transaction(found_user.email,value.amount);
 
@@ -96,6 +91,44 @@ export const verify_transaction = async (req: Request, res: Response) => {
   }
 };
 
+export const direct_debit_charge = async (req: Request, res: Response) => {
+  try {
+    const { error, value } = direct_debit_charge_validator(req.body);
+
+    if(error){
+        throw new Error(error );
+    }
+    const found_user = await user_service.get_user_by_id(value.user_id)
+    
+    if(!found_user){
+        throw new Error("User Doesn't Exist")
+    }
+   
+    amount_check(value.amount)
+    const payment_data = await charge_direct_debit_account(value.authorization_code,value.amount,found_user.email,);
+
+    const data = {
+      amount:value.amount,
+      user_id:found_user.id,
+      transaction_type:TransactionType.DEPOSIT,
+      reference:payment_data.data.reference
+    }
+   const created_transaction =  await transaction_service.create_transaction(data,TransactionStatus.INITIATED)    
+   console.log("CREATED TRANSACTION", created_transaction)  
+
+    res.status(200).send({
+      status: 'success',
+      message: 'Payment initialized successfully',
+      data: payment_data,
+    });
+  } catch (error: any) {
+     res.status(500).send({
+      status: 'failed',
+      message: error.message,
+    });
+  }
+};
+
 export const get_user_transaction_history = async (req: Request, res: Response) => {
   try {
     const { error, value } = get_user_transaction_history_validator(req.query);
@@ -122,6 +155,8 @@ export const get_user_transaction_history = async (req: Request, res: Response) 
     });
   }
 };
+
+
 
 export const process_paystack_webhook = async (req: Request, res: Response): Promise<void> => {
   console.log("PAYSTACK WEBHOOK CALLED");
@@ -176,6 +211,14 @@ export const process_paystack_webhook = async (req: Request, res: Response): Pro
         const new_balance = intial_balance + amount;
         const updated_user = await user_service.update_user_balance(found_user?.id!, new_balance);
         console.log("USER BALANCE UPDATED", updated_user);
+        break;
+      
+      case "direct_debit.authorization.created":
+        await paystack_direct_debit_created(data)
+        break;
+    
+      case "direct_debit.authorization.active":
+        await paystack_direct_debit_active(data)
         break;
         
       default:

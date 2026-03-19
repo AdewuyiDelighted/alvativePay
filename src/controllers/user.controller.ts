@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
-import { login_user_validator, register_user_validator } from "../validators/user.validator";
+import { intialize_direct_debit_validator, login_user_validator, register_user_validator } from "../validators/user.validator";
 import { generateToken, hashPassword, verifyPassword } from "../utils/helper.util";
 import { user_service } from "../models/user.model";
+import { authorize_user_direct_debit } from "../utils/paystack.util";
+import { db } from "../utils/db.connect.util";
+import { DirectDebitMandateStatus } from "@prisma/client";
 
 
 
@@ -96,3 +99,39 @@ export const get_user = async (req: Request, res: Response) => {
   }
 }
 
+export const authorize_direct_debit = async (req: Request, res: Response) => {
+  try {
+    const { error, value } = intialize_direct_debit_validator(req.body);
+
+    if(error){
+        throw new Error(error );
+    }
+    const found_user = await user_service.get_user_by_id(value.user_id)
+    
+    if(!found_user){
+        throw new Error("User Doesn't Exist")
+    }
+  
+    const response = await authorize_user_direct_debit(found_user.email, "https://yourapp.com/direct-debit-callback");
+    const created_mandate = await db.directDebitMandate.create({
+      data:{
+        user_id:found_user.id,
+        reference:response.data.reference,
+        status:DirectDebitMandateStatus.initialized,
+      }  
+    })
+    console.log("Created Mandate", created_mandate)
+
+
+    res.status(200).send({
+      status: 'success',
+      message: 'Direct debit authorization in process',
+      data: response,
+    });
+  } catch (error: any) {
+     res.status(500).send({
+      status: 'failed',
+      message: error.message,
+    });
+  }
+};

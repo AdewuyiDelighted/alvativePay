@@ -14,16 +14,17 @@ datasource db {
 }
 
 model User {
-  id                String      @id @unique @default(uuid())
-  first_name        String
-  last_name         String
-  email             String     @unique @db.VarChar(256)
-  password          String
-  balance           Float    @default(0.0)
-  phone_number      String
-  transactions      Transaction[] @relation("userTransactions")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+id                  String      @id @unique @default(uuid())
+first_name          String
+last_name           String
+email               String     @unique @db.VarChar(256)
+password            String
+balance             Float    @default(0.0)
+phone_number        String
+transactions        Transaction[] @relation("userTransactions")
+directDebitMandates DirectDebitMandate[]
+createdAt           DateTime @default(now())
+updatedAt           DateTime @updatedAt
 }
 
 model Transaction {
@@ -36,7 +37,31 @@ model Transaction {
   transaction_type    TransactionType
   transaction_status  TransactionStatus
 }
-
+model DirectDebitMandate {
+  id                    String        @id @default(uuid())
+  authorization_code    String?       @unique
+  user_id            String        
+  status                DirectDebitMandateStatus @default(initialized)
+  channel               String?
+  last4                 String?          
+  card_type             String?
+  bank                  String?
+  exp_month             String?
+  exp_year              String?
+  country_code          String?
+  brand                 String?
+  account_name          String?
+  customer_first_name   String?
+  customer_last_name    String?
+  customer_code         String?
+  customer_email        String?
+  customer_phone        String?
+  signature             String?
+  reference             String?       @unique
+  created_at            DateTime      @default(now())
+  updated_at            DateTime      @updatedAt
+  user                  User?    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
 enum TransactionType{
   DEPOSIT
   TRANSFER
@@ -46,4 +71,10 @@ enum TransactionStatus{
   FAILED
   SUCCESSFULL
   INITIATED
+}
+
+enum DirectDebitMandateStatus {
+  initialized
+  active
+  pending
 }

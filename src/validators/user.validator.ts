@@ -17,3 +17,8 @@ const register_user = Joi.object({
   });
   
   export const login_user_validator = validator(login_user);
+
+  const intialize_direct_debit = Joi.object({
+    user_id: Joi.string().required(),
+  });
+  export const intialize_direct_debit_validator = validator(intialize_direct_debit);

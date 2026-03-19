@@ -1,3 +1,4 @@
+import { DirectDebitMandateStatus } from "@prisma/client";
 import { db } from "../utils/db.connect.util";
 
 interface IRegisterUser{
@@ -33,6 +34,9 @@ export const user_service = {
             where:{
                 id
             },
+            include:{
+                directDebitMandates:true
+            }
         })
     },
 
@@ -56,6 +60,33 @@ export const user_service = {
                 balance:true,
             }
         })
-    }
+    },
+    update_direct_debit_mandate : async(data:any,status:DirectDebitMandateStatus) => {
+        return db.directDebitMandate.update({
+          where:{
+            reference: data.reference,
+          },
+            data: {
+              authorization_code: data.authorization_code,
+              status,
+              channel: data.channel,
+              last4:data.last4,
+              card_type: data.card_type,
+              bank: data.bank,
+              exp_month: data.exp_month,
+              exp_year: data.exp_year,
+              country_code:data.country_code,
+              brand: data.brand,
+              account_name: data.account_name,
+              customer_first_name: data.customer.first_name,
+              customer_last_name: data.customer.last_name,
+              customer_code: data.customer.code,
+              customer_email: data.customer.email,
+              customer_phone: data.customer.phone,
+              signature: data.signature,
+            },
+          })
+        },
+      
 
 }

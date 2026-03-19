@@ -30,3 +30,10 @@ const deposit_money = Joi.object({
   });
   
   export const get_user_transaction_history_validator = validator(get_user_transaction_history);
+
+  const direct_debit_charge = Joi.object({
+    user_id: Joi.string().required(),
+    amount:Joi.number().required(),
+    authorization_code:Joi.string().required(),
+  })
+  export const direct_debit_charge_validator = validator(direct_debit_charge);
