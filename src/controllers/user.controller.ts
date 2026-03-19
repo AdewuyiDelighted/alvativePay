@@ -24,11 +24,14 @@ export const register_user = async (req: Request, res: Response) =>  {
 
       const hashedPassword = await hashPassword(value.password);
       const user = await user_service.register_user(value,hashedPassword)
+      const token = generateToken(user.id);
+
 
       res.status(200).send({
         status: "success",
         message: "Your request was successful",
         data: user,
+        token: token
       });
   } catch(error:any){
     res.status(500).send({
